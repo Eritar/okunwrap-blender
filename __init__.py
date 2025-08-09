@@ -33,7 +33,7 @@ import addon_utils
 import pathlib
 import platform
 
-DLL_PATH = "okunwrap.dll"
+DLL_PATH = "okunwrap.dll" if platform.system() == "Windows" else "libokunwrap.so"
 okunwrap_dll = None
 
 
@@ -295,7 +295,7 @@ class MESH_OT_unload_dll(bpy.types.Operator):
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
-        windll.kernel32.FreeLibrary(c_void_p(okunwrap_dll._handle))
+        unloadLibrary()
         return {"FINISHED"}
 
 
