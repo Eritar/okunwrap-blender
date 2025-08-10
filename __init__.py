@@ -227,7 +227,6 @@ class MESH_OT_unwrap(bpy.types.Operator):
 
                 for i, edge in enumerate(bm.edges):
                     edge.seam = ptr_result[i]
-                
 
                 bmesh.update_edit_mesh(obj_data)
 
@@ -249,32 +248,6 @@ class MESH_OT_unwrap(bpy.types.Operator):
         return {"FINISHED"}
 
 
-class MESH_OT_unload_dll(bpy.types.Operator):
-    """Create a new monkey mesh object with a subdivision surf modifier and shaded smooth"""
-
-    bl_idname = "mesh.unload_dll"
-    bl_label = "PLACEHOLDER"
-    bl_options = {"REGISTER", "UNDO"}
-
-    def execute(self, context):
-        unloadLibrary()
-        return {"FINISHED"}
-
-
-class MESH_OT_load_dll(bpy.types.Operator):
-    """Create a new monkey mesh object with a subdivision surf modifier and shaded smooth"""
-
-    bl_idname = "mesh.load_dll"
-    bl_label = "PLACEHOLDER"
-    bl_options = {"REGISTER", "UNDO"}
-
-    def execute(self, context):
-        global okunwrap_dll
-        okunwrap_dll = CDLL(getLibraryPath())
-
-        return {"FINISHED"}
-
-
 class VIEW3D_PT_OKUnwrap(bpy.types.Panel):  # class naming convention ‘CATEGORY_PT_name’
 
     # where to add the panel in the UI
@@ -292,12 +265,6 @@ class VIEW3D_PT_OKUnwrap(bpy.types.Panel):  # class naming convention ‘CATEGOR
 
         row = self.layout.row()
         row.operator("mesh.unwrap", text="Unwrap")
-        self.layout.separator()
-
-        row = self.layout.row()
-        row.operator("mesh.load_dll", text="LOAD DLL")
-        row = self.layout.row()
-        row.operator("mesh.unload_dll", text="UNLOAD DLL")
 
         self.layout.separator()
         row = self.layout.row()
@@ -427,10 +394,11 @@ class CURVATURE_Properties(bpy.types.PropertyGroup):
 
     unwrapType: bpy.props.EnumProperty(
         name="Unwrap Type",
-        default='ANGLE_BASED',
-        items= [('ANGLE_BASED', "Angle Based", ""),
-                ('CONFORMAL', "Conformal", ""),
-                ('MINIMUM_STRETCH', "Minimum Stretch", "")
+        default="ANGLE_BASED",
+        items=[
+            ("ANGLE_BASED", "Angle Based", ""),
+            ("CONFORMAL", "Conformal", ""),
+            ("MINIMUM_STRETCH", "Minimum Stretch", ""),
         ],
         description="Unwrap type - Angle Based, Conformal or Minimum Stretch",
     )  # type: ignore
@@ -439,8 +407,6 @@ class CURVATURE_Properties(bpy.types.PropertyGroup):
 classes = [
     VIEW3D_PT_OKUnwrap,
     MESH_OT_unwrap,
-    MESH_OT_unload_dll,
-    MESH_OT_load_dll,
     CURVATURE_Properties,
 ]
 
