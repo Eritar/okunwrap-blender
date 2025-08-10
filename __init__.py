@@ -220,8 +220,6 @@ class MESH_OT_unwrap(bpy.types.Operator):
                     for edge in bm.edges:
                         edge.seam = False
 
-                bpy.ops.mesh.select_all(action="DESELECT")
-
                 batch = beginUnwrapBatch(bm, obj_data, context)
                 okunwrap_dll.OKUnwrap_Batch_Execute(batch)
 
@@ -229,6 +227,14 @@ class MESH_OT_unwrap(bpy.types.Operator):
 
                 for i, edge in enumerate(bm.edges):
                     edge.seam = ptr_result[i]
+                
+
+                if CURVATURE_Properties.unwrapAtEnd:
+                    if bpy.app.version >= (4, 3, 0):
+                        bpy.ops.uv.unwrap(method=CURVATURE_Properties.unwrapType)
+                    else:
+                        bpy.ops.uv.unwrap()
+                        
 
                 VIEW3D_PT_OKUnwrap.operation_time = round(
                     (time.perf_counter() - start) * 1000, 2
@@ -309,6 +315,12 @@ class VIEW3D_PT_OKUnwrap(bpy.types.Panel):  # class naming convention ‘CATEGOR
         row.prop(CURVATURE_Properties, "unwrapAtEnd", text="Unwrap UV")
         self.layout.separator()
 
+        if bpy.app.version >= (4, 3, 0):
+            self.layout.label(text="Unwrap Type:")
+            row = self.layout.row()
+            row.prop(CURVATURE_Properties, "unwrapType", text="")
+
+        self.layout.separator()
         row = self.layout.row()
         row.prop(CURVATURE_Properties, "biasCurvatureAmount", text="Curvature Bias")
         row = self.layout.row()
@@ -411,6 +423,16 @@ class CURVATURE_Properties(bpy.types.PropertyGroup):
         soft_max=1,
         step=0.01,
         description="Affects how much the seam loops will try to connect with already existing seams.\nRanges from 0 to 1+",
+    )  # type: ignore
+
+    unwrapType: bpy.props.EnumProperty(
+        name="Unwrap Type",
+        default='ANGLE_BASED',
+        items= [('ANGLE_BASED', "Angle Based", ""),
+                ('CONFORMAL', "Conformal", ""),
+                ('MINIMUM_STRETCH', "Minimum Stretch", "")
+        ],
+        description="Unwrap type - Angle Based, Conformal or Minimum Stretch",
     )  # type: ignore
 
 
