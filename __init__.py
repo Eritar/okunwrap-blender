@@ -149,53 +149,6 @@ def loadLibrary():
     okunwrap_dll = CDLL(str(addon_path))
 
     try:
-        okunwrap_dll.OKUnwrap_StartUnwrapOp.argtypes = []
-        okunwrap_dll.OKUnwrap_StartUnwrapOp.restype = c_void_p
-
-        okunwrap_dll.OKUnwrap_FinishUnwrapOp.argtypes = [c_void_p]
-        okunwrap_dll.OKUnwrap_FinishUnwrapOp.restype = None
-
-        okunwrap_dll.OKUnwrap_InitMeshData.argtypes = [
-            c_void_p,
-            EdgeData,
-            VertexData,
-            SeamData,
-        ]
-        okunwrap_dll.OKUnwrap_InitMeshData.restype = None
-
-        okunwrap_dll.OKUnwrap_ClearCurvatureData.argtypes = [c_void_p]
-        okunwrap_dll.OKUnwrap_ClearCurvatureData.restype = None
-
-        okunwrap_dll.OKUnwrap_InsertCurvatureData.argtypes = [
-            c_void_p,
-            c_int,
-            c_float,
-        ]
-        okunwrap_dll.OKUnwrap_InsertCurvatureData.restype = None
-
-        okunwrap_dll.OKUnwrap_GetCurvature.argtypes = [c_void_p, c_int]
-        okunwrap_dll.OKUnwrap_GetCurvature.restype = c_float
-
-        okunwrap_dll.OKUnwrap_UpdateSettings.argtypes = [c_void_p, UnwrapSettings]
-        okunwrap_dll.OKUnwrap_UpdateSettings.restype = None
-
-        okunwrap_dll.OKUnwrap_ExtendToLoop.argtypes = [c_void_p, c_int]
-        okunwrap_dll.OKUnwrap_ExtendToLoop.restype = POINTER(c_int)
-
-        okunwrap_dll.OKUnwrap_ExtendToLoopResultSize.argtypes = [c_void_p]
-        okunwrap_dll.OKUnwrap_ExtendToLoopResultSize.restype = c_int
-
-        okunwrap_dll.OKUnwrap_MarkSeam.argtypes = [c_void_p, c_int, c_bool]
-        okunwrap_dll.OKUnwrap_MarkSeam.restype = None
-
-        okunwrap_dll.OKUnwrap_ClearSeams.argtypes = [c_void_p]
-        okunwrap_dll.OKUnwrap_ClearSeams.restype = None
-
-        okunwrap_dll.OKUnwrap_SetCurvatureData.argtypes = [c_void_p, CurvatureArray]
-        okunwrap_dll.OKUnwrap_SetCurvatureData.restype = None
-
-        # =======================
-
         okunwrap_dll.OKUnwrap_Batch_Begin.argtypes = [UnwrapSettings]
         okunwrap_dll.OKUnwrap_Batch_Begin.restype = c_void_p
 
@@ -210,12 +163,6 @@ def loadLibrary():
 
         okunwrap_dll.OKUnwrap_Batch_Result.argtypes = [c_void_p]
         okunwrap_dll.OKUnwrap_Batch_Result.restype = POINTER(c_int)
-
-        okunwrap_dll.OKUnwrap_Batch_ResultSize.argtypes = [c_void_p]
-        okunwrap_dll.OKUnwrap_Batch_ResultSize.restype = c_int
-
-        okunwrap_dll.OKUnwrap_Batch_GrowSelection.argtypes = [c_void_p, c_int]
-        okunwrap_dll.OKUnwrap_Batch_GrowSelection.restype = None
     except Exception as e:
         print(f"OKUnwrap register(): {e}", file=sys.stderr)
     finally:
