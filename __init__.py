@@ -33,8 +33,17 @@ import addon_utils
 import pathlib
 import platform
 
-DLL_PATH = "okunwrap.dll" if platform.system() == "Windows" else "libokunwrap.so"
 okunwrap_dll = None
+
+
+def getLibraryPath():
+    match platform.system():
+        case "Windows":
+            return "okunwrap.dll"
+        case "Darwin":
+            return "libokunwrap.dylib"
+        case _:
+            return "libokunwrap.so"
 
 
 class ExternalArray(Structure):
@@ -145,7 +154,7 @@ def loadLibrary():
         if mod.bl_info.get("name") != "OKUnwrap":
             continue
         p = pathlib.Path(mod.__file__)
-        addon_path = p.parent / DLL_PATH
+        addon_path = p.parent / getLibraryPath()
     okunwrap_dll = CDLL(str(addon_path))
 
     try:
@@ -255,7 +264,7 @@ class MESH_OT_load_dll(bpy.types.Operator):
 
     def execute(self, context):
         global okunwrap_dll
-        okunwrap_dll = CDLL(DLL_PATH)
+        okunwrap_dll = CDLL(getLibraryPath())
 
         return {"FINISHED"}
 

@@ -3,3 +3,4 @@ __pycache__
 *.fbx
 *.dll
 *.so*
+*.dylib*
