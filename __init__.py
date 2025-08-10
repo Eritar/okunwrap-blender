@@ -229,17 +229,17 @@ class MESH_OT_unwrap(bpy.types.Operator):
                     edge.seam = ptr_result[i]
                 
 
-                if CURVATURE_Properties.unwrapAtEnd:
-                    if bpy.app.version >= (4, 3, 0):
-                        bpy.ops.uv.unwrap(method=CURVATURE_Properties.unwrapType)
-                    else:
-                        bpy.ops.uv.unwrap()
-                        
-
-                VIEW3D_PT_OKUnwrap.operation_time = round(
-                    (time.perf_counter() - start) * 1000, 2
-                )
                 bmesh.update_edit_mesh(obj_data)
+
+            if CURVATURE_Properties.unwrapAtEnd:
+                if bpy.app.version >= (4, 3, 0):
+                    bpy.ops.uv.unwrap(method=CURVATURE_Properties.unwrapType)
+                else:
+                    bpy.ops.uv.unwrap()
+
+            VIEW3D_PT_OKUnwrap.operation_time = round(
+                (time.perf_counter() - start) * 1000, 2
+            )
         except Exception as e:
             print(f"MESH_OT_unwrap: {e}", file=sys.stderr)
         finally:
@@ -385,7 +385,7 @@ class CURVATURE_Properties(bpy.types.PropertyGroup):
 
     unwrapAtEnd: bpy.props.BoolProperty(
         name="UV Unwrap",
-        default=True,
+        default=False,
         description="Will unwrap the model after seam generation. If unchecked - OKUnwrap will only add seams to the model",
     )  # type: ignore
 
