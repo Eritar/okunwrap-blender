@@ -306,17 +306,17 @@ class VIEW3D_PT_OKUnwrap(bpy.types.Panel):  # class naming convention ‘CATEGOR
 
         self.layout.separator()
         row = self.layout.row()
-        row.prop(CURVATURE_Properties, "unwrapSteps", text="Unwrap Steps")
+        row.prop(CURVATURE_Properties, "unwrapSteps")
         row = self.layout.row()
-        row.prop(CURVATURE_Properties, "curvatureThreshold", text="Curvature Threshold")
+        row.prop(CURVATURE_Properties, "curvatureThreshold")
         row = self.layout.row()
-        row.prop(CURVATURE_Properties, "extendAmount", text="Extend Amount")
+        row.prop(CURVATURE_Properties, "extendAmount")
         row = self.layout.row()
-        row.prop(CURVATURE_Properties, "seamMarginAmount", text="Seam Margin Amount")
+        row.prop(CURVATURE_Properties, "seamMarginAmount")
         row = self.layout.row()
-        row.prop(CURVATURE_Properties, "seamSearchRadius", text="Seam Search Radius")
+        row.prop(CURVATURE_Properties, "seamSearchRadius")
         row = self.layout.row()
-        row.prop(CURVATURE_Properties, "overwriteSeams", text="Overwrite Seams")
+        row.prop(CURVATURE_Properties, "overwriteSeams")
         row.prop(CURVATURE_Properties, "unwrapAtEnd", text="Unwrap UV")
         row = self.layout.row()
         row.prop(CURVATURE_Properties, "useSharpAsSeams")
@@ -329,7 +329,7 @@ class VIEW3D_PT_OKUnwrap(bpy.types.Panel):  # class naming convention ‘CATEGOR
 
         self.layout.separator()
         row = self.layout.row()
-        row.prop(CURVATURE_Properties, "biasCurvatureAmount", text="Curvature Bias")
+        row.prop(CURVATURE_Properties, "biasCurvatureAmount")
         row = self.layout.row()
         row.prop(
             CURVATURE_Properties,
@@ -337,9 +337,7 @@ class VIEW3D_PT_OKUnwrap(bpy.types.Panel):  # class naming convention ‘CATEGOR
             text="Inline Loopness Bias",
         )
         row = self.layout.row()
-        row.prop(
-            CURVATURE_Properties, "biasSeamClosenessAmount", text="Seam Closeness Bias"
-        )
+        row.prop(CURVATURE_Properties, "biasSeamClosenessAmount")
         row = self.layout.row()
 
         self.layout.separator()
