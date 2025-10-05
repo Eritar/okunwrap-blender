@@ -16,7 +16,7 @@ bl_info = {
     "author": "Iurii Kotlov, Vladislav Lopanov",
     "description": "Automatic curvature-based UV unwrapping",
     "blender": (4, 23, 0),
-    "version": (1, 0, 0),
+    "version": (1, 0, 1),
     "location": "",
     "warning": "",
     "category": "Generic",
@@ -220,6 +220,11 @@ class MESH_OT_unwrap(bpy.types.Operator):
                     for edge in bm.edges:
                         edge.seam = False
 
+                if CURVATURE_Properties.useSharpAsSeams:
+                    for edge in bm.edges:
+                        if not edge.smooth:
+                            edge.seam = True
+
                 batch = beginUnwrapBatch(bm, obj_data, context)
                 okunwrap_dll.OKUnwrap_Batch_Execute(batch)
 
@@ -313,6 +318,8 @@ class VIEW3D_PT_OKUnwrap(bpy.types.Panel):  # class naming convention ‘CATEGOR
         row = self.layout.row()
         row.prop(CURVATURE_Properties, "overwriteSeams", text="Overwrite Seams")
         row.prop(CURVATURE_Properties, "unwrapAtEnd", text="Unwrap UV")
+        row = self.layout.row()
+        row.prop(CURVATURE_Properties, "useSharpAsSeams")
         self.layout.separator()
 
         if bpy.app.version >= (4, 3, 0):
@@ -434,6 +441,12 @@ class CURVATURE_Properties(bpy.types.PropertyGroup):
         ],
         description="Unwrap type - Angle Based, Conformal or Minimum Stretch",
     )  # type: ignore
+
+    useSharpAsSeams: bpy.props.BoolProperty(
+        name="Mark Sharp Edges as Seams",
+        default=True,
+        description="Option will mark all sharp edges as seams before running the algorithm",
+    ) # type: ignore
 
 
 classes = [
