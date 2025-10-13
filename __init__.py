@@ -237,10 +237,12 @@ class MESH_OT_unwrap(bpy.types.Operator):
                 bmesh.update_edit_mesh(obj_data)
 
             if CURVATURE_Properties.unwrapAtEnd:
+                bpy.ops.mesh.select_all(action='SELECT')
                 if bpy.app.version >= (4, 3, 0):
                     bpy.ops.uv.unwrap(method=CURVATURE_Properties.unwrapType)
                 else:
                     bpy.ops.uv.unwrap()
+                bpy.ops.mesh.select_all(action='DESELECT')
 
             VIEW3D_PT_OKUnwrap.operation_time = round(
                 (time.perf_counter() - start) * 1000, 2
