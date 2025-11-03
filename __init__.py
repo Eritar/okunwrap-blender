@@ -27,6 +27,8 @@ import bmesh
 import time
 import numpy as np
 from numpy.linalg import norm
+from mathutils import Vector
+from math import degrees, acos
 from ctypes import *
 import sys
 import addon_utils
@@ -94,10 +96,14 @@ class UnwrapSettings(Structure):
     ]
 
 
-def prepareMeshData(unwrap_batch, bm, obj_data):
-    arr_edges = np.zeros(len(bm.edges), dtype=np.dtype("i,i,i,b,f", align=True))
+def prepareMeshData(unwrap_batch, bm, obj_data, edges=None, verts=None):
+    if edges == None:
+        edges = bm.edges
+    if verts == None:
+        verts = bm.verts
+    arr_edges = np.zeros(len(edges), dtype=np.dtype("i,i,i,b,f", align=True))
 
-    for idx, edge in enumerate(bm.edges):
+    for idx, edge in enumerate(edges):
         edge_angle = 0
 
         if edge.is_contiguous:
@@ -113,28 +119,42 @@ def prepareMeshData(unwrap_batch, bm, obj_data):
     okunwrap_dll.OKUnwrap_Batch_InitMesh(
         unwrap_batch,
         EdgeData(arr_edges.ctypes._as_parameter_, len(arr_edges)),
-        VertexData(obj_data.vertices[0].as_pointer(), len(bm.verts)),
+        VertexData(obj_data.vertices[0].as_pointer(), len(verts)),
     )
 
     return arr_edges
 
 
-def beginUnwrapBatch(bm, obj_data, context):
+def beginUnwrapBatch(bm, obj_data, context, edges=None, verts=None):
     CURVATURE_Properties = context.scene.CURVATURE_Properties
 
-    batch = okunwrap_dll.OKUnwrap_Batch_Begin(
-        UnwrapSettings(
-            CURVATURE_Properties.biasCurvatureAmount,
-            CURVATURE_Properties.biasInlineLoopnessAmount,
-            CURVATURE_Properties.biasSeamClosenessAmount,
-            CURVATURE_Properties.curvatureThreshold,
-            CURVATURE_Properties.seamMarginAmount,
-            CURVATURE_Properties.seamSearchRadius,
-            CURVATURE_Properties.extendAmount,
-            CURVATURE_Properties.unwrapSteps,
-        ),
-    )
-    prepareMeshData(batch, bm, obj_data)
+    if edges is None and verts is None:
+        batch = okunwrap_dll.OKUnwrap_Batch_Begin(
+            UnwrapSettings(
+                CURVATURE_Properties.biasCurvatureAmount,
+                CURVATURE_Properties.biasInlineLoopnessAmount,
+                CURVATURE_Properties.biasSeamClosenessAmount,
+                CURVATURE_Properties.curvatureThreshold,
+                CURVATURE_Properties.seamMarginAmount,
+                CURVATURE_Properties.seamSearchRadius,
+                CURVATURE_Properties.extendAmount,
+                CURVATURE_Properties.unwrapSteps,
+            ),
+        )
+    else:
+        batch = okunwrap_dll.OKUnwrap_Batch_Begin(
+            UnwrapSettings(
+                CURVATURE_Properties.biasCurvatureAmount,
+                CURVATURE_Properties.biasInlineLoopnessAmount,
+                CURVATURE_Properties.biasSeamClosenessAmount,
+                0.1,
+                1,
+                CURVATURE_Properties.seamSearchRadius,
+                CURVATURE_Properties.extendAmount,
+                CURVATURE_Properties.unwrapSteps,
+            ),
+        )
+    prepareMeshData(batch, bm, obj_data, edges, verts)
 
     return batch
 
@@ -190,6 +210,130 @@ def unloadLibrary():
         print(f"OKUnwrap unregister(): {e}", file=sys.stderr)
 
 
+def selectDistortedFaces(context, obj, bm, threshold):
+    """
+    Selects faces with UV angular distortion above a normalized threshold.
+    """
+    # threshold = 0.2
+
+    uv_layer = bm.loops.layers.uv.active
+
+    face_distortions = {}
+    max_distortion = 0.0
+
+    for face in bm.faces:
+        total_distortion = 0.0
+        loops = face.loops
+        num_loops = len(loops)
+
+        for i in range(num_loops):
+            # Get 3D angle
+            geom_angle = loops[i].calc_angle()
+            #TODO: Use curvature values
+
+            # Get UV coordinates for the current corner and its neighbors
+            uv_center = loops[i][uv_layer].uv
+            uv_prev = loops[i-1][uv_layer].uv
+            uv_next = loops[(i + 1) % num_loops][uv_layer].uv
+
+            # Calculate UV angle
+            uv_angle = get_uv_angle(uv_center, uv_prev, uv_next)
+
+            # Accumulate distortion
+            total_distortion += abs(geom_angle - uv_angle)
+        
+        face_distortions[face.index] = total_distortion
+        if total_distortion > max_distortion:
+            max_distortion = total_distortion
+
+    # Normalize distortions and select faces
+    bpy.ops.mesh.select_all(action='DESELECT')
+    
+    if max_distortion > 0:
+        for face in bm.faces:
+            normalized_distortion = face_distortions[face.index] / max_distortion
+            if normalized_distortion > threshold:
+                face.select = True
+    bpy.ops.uv.select_linked()
+
+    distortedFaces = [f for f in bm.faces if f.select]
+    return distortedFaces
+
+
+def selectDistortedEdges(context, obj, bm, threshold):
+    """
+    Selects edges with UV length distortion above a normalized threshold.
+    """
+    # threshold = 0.8
+
+    uv_layer = bm.loops.layers.uv.active
+        
+    edge_distortions = {}
+    max_distortion = 0.0
+
+    for edge in bm.edges:
+        geom_length = edge.calc_length()
+        if geom_length < 0.0001:
+            continue
+
+        max_edge_uv_distortion = 0.0
+
+        # An edge can be part of multiple faces, and thus have multiple UV representations
+        for face in edge.link_faces:
+            uv1, uv2 = None, None
+            # Find the UV coordinates corresponding to the edge's vertices within this face
+            for loop in face.loops:
+                if loop.vert == edge.verts[0]:
+                    uv1 = loop[uv_layer].uv
+                elif loop.vert == edge.verts[1]:
+                    uv2 = loop[uv_layer].uv
+            
+            if uv1 and uv2:
+                uv_length = (uv1 - uv2).length
+                # Use the absolute difference from a perfect 1.0 ratio
+                distortion = abs(1.0 - (uv_length / geom_length))
+                if distortion > max_edge_uv_distortion:
+                    max_edge_uv_distortion = distortion
+
+        edge_distortions[edge.index] = max_edge_uv_distortion
+        if max_edge_uv_distortion > max_distortion:
+            max_distortion = max_edge_uv_distortion
+
+    # Set selection mode to edges
+    bpy.ops.mesh.select_mode(type="EDGE")
+    bpy.ops.mesh.select_all(action='DESELECT')
+
+    edge_distortions = {k: v for k, v in sorted(edge_distortions.items(), key=lambda x: x[1],reverse=True)}
+    # print(edge_distortions)
+    # bm.edges[next(iter(edge_distortions))].select = True
+
+    if max_distortion > 0:
+        for edge in bm.edges:
+            normalized_distortion = edge_distortions[edge.index] / max_distortion
+            # bpy.ops.mesh.select_all(action='DESELECT')
+            if normalized_distortion > threshold:
+                edge.select = True
+                bpy.ops.mesh.py_extend_to_loop()
+                edge.select = False
+
+
+def get_uv_angle(uv1, uv2, uv3):
+    """Calculates the angle between three 2D UV coordinates."""
+    vec1 = uv2 - uv1
+    vec2 = uv3 - uv1
+    
+    # Handle cases where vectors have zero length
+    if vec1.length == 0 or vec2.length == 0:
+        return 0.0
+
+    dot_product = vec1.dot(vec2)
+    
+    # Clamp the dot product to avoid math domain errors
+    clamp_dot = max(-1.0, min(1.0, dot_product / (vec1.length * vec2.length)))
+    
+    return acos(clamp_dot)
+
+
 class MESH_OT_unwrap(bpy.types.Operator):
     """Unwraps selected/edited meshes using the settings below"""
 
@@ -201,6 +345,7 @@ class MESH_OT_unwrap(bpy.types.Operator):
         CURVATURE_Properties = context.scene.CURVATURE_Properties
         start = time.perf_counter()
         batch = None
+        smallBatch = None
 
         try:
             for obj in bpy.context.selected_objects:
@@ -233,8 +378,46 @@ class MESH_OT_unwrap(bpy.types.Operator):
                 for i, edge in enumerate(bm.edges):
                     edge.seam = ptr_result[i]
                 
-
                 bmesh.update_edit_mesh(obj_data)
+
+                if CURVATURE_Properties.enablePostProcess:
+                    print('\n')
+                    bpy.ops.mesh.select_all(action='SELECT')
+
+                    bpy.ops.uv.unwrap(method='CONFORMAL')
+
+                    # FUCKING GARBAGE
+                    # selectDistortedEdges(context, obj, bm, CURVATURE_Properties.postProcessDistortionThreshold)
+
+                    distortedFaces = selectDistortedFaces(context, obj, bm, CURVATURE_Properties.postProcessDistortionThreshold)
+                    distortedEdges = list()
+                    distortedVerts = list()
+                    for f in distortedFaces:
+                        for e in f.edges:
+                            distortedEdges.append(e)
+                            distortedVerts.append(e.verts[0])
+                            distortedVerts.append(e.verts[1])
+                    # distortedVerts = [v for v in distortedEdges.verts]
+                    distortedEdges = set(distortedEdges)
+                    distortedVerts = set(distortedVerts)
+
+                    # print(distortedFaces, "\n", len(distortedEdges), "\n", distortedVerts)
+
+                    smallBatch = beginUnwrapBatch(bm, obj_data, context, distortedEdges, distortedVerts)
+                    # print("\n"*2, smallBatch) 
+                    okunwrap_dll.OKUnwrap_Batch_Execute(smallBatch)
+
+                    small_ptr_result = okunwrap_dll.OKUnwrap_Batch_Result(smallBatch)
+
+                    for i, edge in enumerate(bm.edges):
+                        edge.seam = bool(small_ptr_result[i])
+                    
+                    bmesh.update_edit_mesh(obj_data)
+
+                    # bpy.ops.mesh.select_all(action='DESELECT')
+
+            endUnwrapBatch(batch)
+            endUnwrapBatch(smallBatch)
 
             if CURVATURE_Properties.unwrapAtEnd:
                 bpy.ops.mesh.select_all(action='SELECT')
@@ -250,7 +433,9 @@ class MESH_OT_unwrap(bpy.types.Operator):
         except Exception as e:
             print(f"MESH_OT_unwrap: {e}", file=sys.stderr)
         finally:
-            endUnwrapBatch(batch)
+            pass
+            # endUnwrapBatch(batch)
+            # endUnwrapBatch(smallBatch)
         print("====================================================")
 
         return {"FINISHED"}
@@ -329,6 +514,12 @@ class VIEW3D_PT_OKUnwrap(bpy.types.Panel):  # class naming convention ‘CATEGOR
             row = self.layout.row()
             row.prop(CURVATURE_Properties, "unwrapType", text="")
 
+        row = self.layout.row()
+        row.prop(CURVATURE_Properties, "enablePostProcess")
+        if CURVATURE_Properties.enablePostProcess:
+            row = self.layout.row()
+            row.prop(CURVATURE_Properties, "postProcessDistortionThreshold")
+        
         self.layout.separator()
         row = self.layout.row()
         row.prop(CURVATURE_Properties, "biasCurvatureAmount")
@@ -448,6 +639,20 @@ class CURVATURE_Properties(bpy.types.PropertyGroup):
         description="Option will mark all sharp edges as seams before running the algorithm",
     ) # type: ignore
 
+    enablePostProcess: bpy.props.BoolProperty(
+        name="Enable Post Process",
+        default=True,
+        description="Option will search for distorted uv islands and attempt to fix them",
+    ) # type: ignore
+
+    postProcessDistortionThreshold: bpy.props.FloatProperty(
+        name="Post Process Distortion Threshold",
+        default=0.6,
+        min=0,
+        soft_max=1,
+        step=0.01,
+        description="Affects how much the seam loops will try to connect with already existing seams.\nRanges from 0 to 1+",
+    )  # type: ignore
 
 classes = [
     VIEW3D_PT_OKUnwrap,
