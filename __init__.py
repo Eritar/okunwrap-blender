@@ -190,6 +190,51 @@ def unloadLibrary():
         print(f"OKUnwrap unregister(): {e}", file=sys.stderr)
 
 
+# Code is absolutely gross, but such is life
+def remove_loop(start_edge: bmesh.types.BMEdge, extendAmount):
+    if start_edge.seam == False:
+        closeEdges = {start_edge for start_edge in start_edge.verts[0].link_edges} | {start_edge for start_edge in start_edge.verts[1].link_edges}
+
+        for e in closeEdges:
+            if e.seam == True:
+                start_edge = e
+                break
+
+    for a in range(2):
+        edgeToCheck = start_edge
+
+        tempVert = edgeToCheck.verts[a]
+        endBranch = False
+        
+        for i in range(extendAmount):
+            if endBranch:
+                break
+
+            neighboringEdges = set(tempVert.link_edges)
+            neighboringEdges.discard(edgeToCheck)
+            
+            for e in neighboringEdges:
+                seamsCloseBy = 0
+
+                for temp_e in tempVert.link_edges:
+                    if temp_e == edgeToCheck:
+                        continue
+                    if temp_e.seam == True:
+                        seamsCloseBy += 1
+                
+                if seamsCloseBy >= 2 or seamsCloseBy == 0:
+                    endBranch = True
+                    break
+
+                if e.seam == True:
+                    tempVert = e.other_vert((set(e.verts) & set(edgeToCheck.verts)).pop())
+                    edgeToCheck = e
+                    e.seam = False
+                    continue
+
+    start_edge.seam = False
+
+
 class MESH_OT_unwrap(bpy.types.Operator):
     """Unwraps selected/edited meshes using the settings below"""
 
@@ -280,6 +325,36 @@ class MESH_OT_load_dll(bpy.types.Operator):
         okunwrap_dll = CDLL(getLibraryPath())
 
         return {"FINISHED"}
+    
+
+class MESH_OT_remove_uv_loop(bpy.types.Operator):
+    """Removes seam loops that are a part of/adjacent to selected edges"""
+
+    bl_idname = "mesh.remove_uv_loop"
+    bl_label = "remove_uv_loop"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        CURVATURE_Properties = context.scene.CURVATURE_Properties
+        start = time.perf_counter()
+
+        mesh_obj = bpy.context.active_object
+        bm = bmesh.from_edit_mesh(mesh_obj.data)
+        
+        selected_edges = {edge for edge in bm.edges if edge.select}
+        
+        if selected_edges:
+            for e in selected_edges:
+                remove_loop(e, CURVATURE_Properties.extendAmount)
+        else:
+            self.report({'INFO'}, 'No edges selected')
+            return {'CANCELLED'}
+
+        bmesh.update_edit_mesh(mesh_obj.data)
+
+        VIEW3D_PT_OKUnwrap.operation_time = round((time.perf_counter() - start)*1000, 2)
+
+        return {'FINISHED'}
 
 
 class VIEW3D_PT_OKUnwrap(bpy.types.Panel):  # class naming convention ‘CATEGORY_PT_name’
@@ -299,6 +374,10 @@ class VIEW3D_PT_OKUnwrap(bpy.types.Panel):  # class naming convention ‘CATEGOR
 
         row = self.layout.row()
         row.operator("mesh.unwrap", text="Unwrap")
+        self.layout.separator()
+
+        row = self.layout.row()
+        row.operator("mesh.remove_uv_loop", text="Remove Loops")
         self.layout.separator()
 
         row = self.layout.row()
@@ -454,6 +533,7 @@ classes = [
     MESH_OT_unwrap,
     MESH_OT_unload_dll,
     MESH_OT_load_dll,
+    MESH_OT_remove_uv_loop,
     CURVATURE_Properties,
 ]
 
