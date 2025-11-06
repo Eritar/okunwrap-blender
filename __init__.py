@@ -334,7 +334,7 @@ class MESH_OT_load_dll(bpy.types.Operator):
     
 
 class MESH_OT_remove_uv_loop(bpy.types.Operator):
-    """Removes seam loops that are a part of/adjacent to selected edges"""
+    """Removes seam loops that are a part of/adjacent to selection. Selection will convert to edges automatically"""
 
     bl_idname = "mesh.remove_uv_loop"
     bl_label = "remove_uv_loop"
@@ -354,9 +354,13 @@ class MESH_OT_remove_uv_loop(bpy.types.Operator):
 
             if not obj.mode == "EDIT":
                 bpy.ops.object.mode_set(mode="EDIT")
+            initialMeshSelectModeState = bpy.context.tool_settings.mesh_select_mode[:]
 
             bm = bmesh.from_edit_mesh(obj_data)
-        
+            bm.select_mode = {'VERT', 'EDGE', 'FACE'}
+            bm.select_flush_mode()
+            context.tool_settings.mesh_select_mode = (False, True, False)
+
             selected_edges = {edge for edge in bm.edges if edge.select}
             
             if selected_edges:
@@ -369,6 +373,7 @@ class MESH_OT_remove_uv_loop(bpy.types.Operator):
                 return {'CANCELLED'}
 
             # bpy.ops.mesh.select_all(action='DESELECT')
+            context.tool_settings.mesh_select_mode = initialMeshSelectModeState
             bmesh.update_edit_mesh(obj_data)
 
         VIEW3D_PT_OKUnwrap.operation_time = round((time.perf_counter() - start)*1000, 2)
