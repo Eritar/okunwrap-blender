@@ -192,13 +192,17 @@ def unloadLibrary():
 
 # Code is absolutely gross, but such is life
 def remove_loop(start_edge: bmesh.types.BMEdge, extendAmount):
+    removedEdges = list()
     if start_edge.seam == False:
         closeEdges = {start_edge for start_edge in start_edge.verts[0].link_edges} | {start_edge for start_edge in start_edge.verts[1].link_edges}
 
         for e in closeEdges:
             if e.seam == True:
                 start_edge = e
+                removedEdges.append(e)
                 break
+    else:
+        removedEdges.append(start_edge)
 
     for a in range(2):
         edgeToCheck = start_edge
@@ -229,10 +233,12 @@ def remove_loop(start_edge: bmesh.types.BMEdge, extendAmount):
                 if e.seam == True:
                     tempVert = e.other_vert((set(e.verts) & set(edgeToCheck.verts)).pop())
                     edgeToCheck = e
+                    removedEdges.append(e)
                     e.seam = False
                     continue
 
     start_edge.seam = False
+    return removedEdges
 
 
 class MESH_OT_unwrap(bpy.types.Operator):
@@ -338,19 +344,32 @@ class MESH_OT_remove_uv_loop(bpy.types.Operator):
         CURVATURE_Properties = context.scene.CURVATURE_Properties
         start = time.perf_counter()
 
-        mesh_obj = bpy.context.active_object
-        bm = bmesh.from_edit_mesh(mesh_obj.data)
-        
-        selected_edges = {edge for edge in bm.edges if edge.select}
-        
-        if selected_edges:
-            for e in selected_edges:
-                remove_loop(e, CURVATURE_Properties.extendAmount)
-        else:
-            self.report({'INFO'}, 'No edges selected')
-            return {'CANCELLED'}
+        # removedLoops = list()
 
-        bmesh.update_edit_mesh(mesh_obj.data)
+        for obj in bpy.context.selected_objects:
+            if obj.type != "MESH":
+                continue
+
+            obj_data = obj.data
+
+            if not obj.mode == "EDIT":
+                bpy.ops.object.mode_set(mode="EDIT")
+
+            bm = bmesh.from_edit_mesh(obj_data)
+        
+            selected_edges = {edge for edge in bm.edges if edge.select}
+            
+            if selected_edges:
+                for e in selected_edges:
+                    remove_loop(e, CURVATURE_Properties.extendAmount)
+                    # removedLoops.extend(remove_loop(e, CURVATURE_Properties.extendAmount))
+            
+            if len(bpy.context.selected_objects) == 1 and len(selected_edges) == 0:
+                self.report({'INFO'}, 'No edges selected')
+                return {'CANCELLED'}
+
+            # bpy.ops.mesh.select_all(action='DESELECT')
+            bmesh.update_edit_mesh(obj_data)
 
         VIEW3D_PT_OKUnwrap.operation_time = round((time.perf_counter() - start)*1000, 2)
 
@@ -378,6 +397,7 @@ class VIEW3D_PT_OKUnwrap(bpy.types.Panel):  # class naming convention ‘CATEGOR
 
         row = self.layout.row()
         row.operator("mesh.remove_uv_loop", text="Remove Loops")
+        # row.operator("mesh.remove_uv_loop", text="", icon='TRASH')
         self.layout.separator()
 
         row = self.layout.row()
