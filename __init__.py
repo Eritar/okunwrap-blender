@@ -96,11 +96,9 @@ class UnwrapSettings(Structure):
     ]
 
 
-def prepareMeshData(unwrap_batch, bm, obj_data, edges=None, verts=None):
-    if edges == None:
-        edges = bm.edges
-    if verts == None:
-        verts = bm.verts
+def prepareMeshData(unwrap_batch, bm, obj_data):
+    edges = bm.edges
+    verts = bm.verts
     arr_edges = np.zeros(len(edges), dtype=np.dtype("i,i,i,b,f", align=True))
 
     for idx, edge in enumerate(edges):
@@ -125,10 +123,10 @@ def prepareMeshData(unwrap_batch, bm, obj_data, edges=None, verts=None):
     return arr_edges
 
 
-def beginUnwrapBatch(bm, obj_data, context, edges=None, verts=None):
+def beginUnwrapBatch(bm, obj_data, context, post_process=False):
     CURVATURE_Properties = context.scene.CURVATURE_Properties
 
-    if edges is None and verts is None:
+    if not post_process:
         batch = okunwrap_dll.OKUnwrap_Batch_Begin(
             UnwrapSettings(
                 CURVATURE_Properties.biasCurvatureAmount,
@@ -146,15 +144,15 @@ def beginUnwrapBatch(bm, obj_data, context, edges=None, verts=None):
             UnwrapSettings(
                 CURVATURE_Properties.biasCurvatureAmount,
                 CURVATURE_Properties.biasInlineLoopnessAmount,
-                CURVATURE_Properties.biasSeamClosenessAmount,
-                0.1,
+                5,
+                0.01,
                 1,
                 CURVATURE_Properties.seamSearchRadius,
                 CURVATURE_Properties.extendAmount,
                 CURVATURE_Properties.unwrapSteps,
             ),
         )
-    prepareMeshData(batch, bm, obj_data, edges, verts)
+    prepareMeshData(batch, bm, obj_data)
 
     return batch
 
@@ -386,31 +384,22 @@ class MESH_OT_unwrap(bpy.types.Operator):
 
                     bpy.ops.uv.unwrap(method='CONFORMAL')
 
-                    # FUCKING GARBAGE
-                    # selectDistortedEdges(context, obj, bm, CURVATURE_Properties.postProcessDistortionThreshold)
-
                     distortedFaces = selectDistortedFaces(context, obj, bm, CURVATURE_Properties.postProcessDistortionThreshold)
                     distortedEdges = list()
-                    distortedVerts = list()
                     for f in distortedFaces:
                         for e in f.edges:
                             distortedEdges.append(e)
-                            distortedVerts.append(e.verts[0])
-                            distortedVerts.append(e.verts[1])
-                    # distortedVerts = [v for v in distortedEdges.verts]
                     distortedEdges = set(distortedEdges)
-                    distortedVerts = set(distortedVerts)
+                    distortedEdgesIndices = {e.index for e in distortedEdges}
 
-                    # print(distortedFaces, "\n", len(distortedEdges), "\n", distortedVerts)
-
-                    smallBatch = beginUnwrapBatch(bm, obj_data, context, distortedEdges, distortedVerts)
-                    # print("\n"*2, smallBatch) 
+                    smallBatch = beginUnwrapBatch(bm, obj_data, context, True)
                     okunwrap_dll.OKUnwrap_Batch_Execute(smallBatch)
 
                     small_ptr_result = okunwrap_dll.OKUnwrap_Batch_Result(smallBatch)
 
                     for i, edge in enumerate(bm.edges):
-                        edge.seam = bool(small_ptr_result[i])
+                        if edge.index in distortedEdgesIndices:
+                            edge.seam = bool(small_ptr_result[i])
                     
                     bmesh.update_edit_mesh(obj_data)
 
@@ -504,16 +493,18 @@ class VIEW3D_PT_OKUnwrap(bpy.types.Panel):  # class naming convention ‘CATEGOR
         row.prop(CURVATURE_Properties, "seamSearchRadius")
         row = self.layout.row()
         row.prop(CURVATURE_Properties, "overwriteSeams")
-        row.prop(CURVATURE_Properties, "unwrapAtEnd", text="Unwrap UV")
         row = self.layout.row()
         row.prop(CURVATURE_Properties, "useSharpAsSeams")
-        self.layout.separator()
+        row = self.layout.row()
+        row.prop(CURVATURE_Properties, "unwrapAtEnd", text="Unwrap UV")
 
-        if bpy.app.version >= (4, 3, 0):
-            self.layout.label(text="Unwrap Type:")
-            row = self.layout.row()
-            row.prop(CURVATURE_Properties, "unwrapType", text="")
+        if CURVATURE_Properties.unwrapAtEnd:
+            if bpy.app.version >= (4, 3, 0):
+                row = self.layout.row(heading='Unwrap Type:')
+                row.prop(CURVATURE_Properties, "unwrapType", text="")
+                # self.layout.separator()
 
+        
         row = self.layout.row()
         row.prop(CURVATURE_Properties, "enablePostProcess")
         if CURVATURE_Properties.enablePostProcess:
@@ -646,12 +637,12 @@ class CURVATURE_Properties(bpy.types.PropertyGroup):
     ) # type: ignore
 
     postProcessDistortionThreshold: bpy.props.FloatProperty(
-        name="Post Process Distortion Threshold",
+        name="Post Process Threshold",
         default=0.6,
         min=0,
         soft_max=1,
         step=0.01,
-        description="Affects how much the seam loops will try to connect with already existing seams.\nRanges from 0 to 1+",
+        description="Threshold after which a UV island is considered distorted, and sent to post-processing",
     )  # type: ignore
 
 classes = [
