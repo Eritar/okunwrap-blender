@@ -227,11 +227,11 @@ def selectDistortedFaces(context, obj, bm, threshold):
         for i in range(num_loops):
             # Get 3D angle
             geom_angle = loops[i].calc_angle()
-            #TODO: Use curvature values
+            # TODO: Use curvature values
 
             # Get UV coordinates for the current corner and its neighbors
             uv_center = loops[i][uv_layer].uv
-            uv_prev = loops[i-1][uv_layer].uv
+            uv_prev = loops[i - 1][uv_layer].uv
             uv_next = loops[(i + 1) % num_loops][uv_layer].uv
 
             # Calculate UV angle
@@ -239,14 +239,14 @@ def selectDistortedFaces(context, obj, bm, threshold):
 
             # Accumulate distortion
             total_distortion += abs(geom_angle - uv_angle)
-        
+
         face_distortions[face.index] = total_distortion
         if total_distortion > max_distortion:
             max_distortion = total_distortion
 
     # Normalize distortions and select faces
-    bpy.ops.mesh.select_all(action='DESELECT')
-    
+    bpy.ops.mesh.select_all(action="DESELECT")
+
     if max_distortion > 0:
         for face in bm.faces:
             normalized_distortion = face_distortions[face.index] / max_distortion
@@ -265,7 +265,7 @@ def selectDistortedEdges(context, obj, bm, threshold):
     # threshold = 0.8
 
     uv_layer = bm.loops.layers.uv.active
-        
+
     edge_distortions = {}
     max_distortion = 0.0
 
@@ -285,7 +285,7 @@ def selectDistortedEdges(context, obj, bm, threshold):
                     uv1 = loop[uv_layer].uv
                 elif loop.vert == edge.verts[1]:
                     uv2 = loop[uv_layer].uv
-            
+
             if uv1 and uv2:
                 uv_length = (uv1 - uv2).length
                 # Use the absolute difference from a perfect 1.0 ratio
@@ -299,9 +299,12 @@ def selectDistortedEdges(context, obj, bm, threshold):
 
     # Set selection mode to edges
     bpy.ops.mesh.select_mode(type="EDGE")
-    bpy.ops.mesh.select_all(action='DESELECT')
+    bpy.ops.mesh.select_all(action="DESELECT")
 
-    edge_distortions = {k: v for k, v in sorted(edge_distortions.items(), key=lambda x: x[1],reverse=True)}
+    edge_distortions = {
+        k: v
+        for k, v in sorted(edge_distortions.items(), key=lambda x: x[1], reverse=True)
+    }
     # print(edge_distortions)
     # bm.edges[next(iter(edge_distortions))].select = True
 
@@ -319,22 +322,26 @@ def get_uv_angle(uv1, uv2, uv3):
     """Calculates the angle between three 2D UV coordinates."""
     vec1 = uv2 - uv1
     vec2 = uv3 - uv1
-    
+
     # Handle cases where vectors have zero length
     if vec1.length == 0 or vec2.length == 0:
         return 0.0
 
     dot_product = vec1.dot(vec2)
-    
+
     # Clamp the dot product to avoid math domain errors
     clamp_dot = max(-1.0, min(1.0, dot_product / (vec1.length * vec2.length)))
-    
+
     return acos(clamp_dot)
+
+
 # Code is absolutely gross, but such is life
 def remove_loop(start_edge: bmesh.types.BMEdge, extendAmount):
     removedEdges = list()
     if start_edge.seam == False:
-        closeEdges = {start_edge for start_edge in start_edge.verts[0].link_edges} | {start_edge for start_edge in start_edge.verts[1].link_edges}
+        closeEdges = {start_edge for start_edge in start_edge.verts[0].link_edges} | {
+            start_edge for start_edge in start_edge.verts[1].link_edges
+        }
 
         for e in closeEdges:
             if e.seam == True:
@@ -349,14 +356,14 @@ def remove_loop(start_edge: bmesh.types.BMEdge, extendAmount):
 
         tempVert = edgeToCheck.verts[a]
         endBranch = False
-        
+
         for i in range(extendAmount):
             if endBranch:
                 break
 
             neighboringEdges = set(tempVert.link_edges)
             neighboringEdges.discard(edgeToCheck)
-            
+
             for e in neighboringEdges:
                 seamsCloseBy = 0
 
@@ -365,13 +372,15 @@ def remove_loop(start_edge: bmesh.types.BMEdge, extendAmount):
                         continue
                     if temp_e.seam == True:
                         seamsCloseBy += 1
-                
+
                 if seamsCloseBy >= 2 or seamsCloseBy == 0:
                     endBranch = True
                     break
 
                 if e.seam == True:
-                    tempVert = e.other_vert((set(e.verts) & set(edgeToCheck.verts)).pop())
+                    tempVert = e.other_vert(
+                        (set(e.verts) & set(edgeToCheck.verts)).pop()
+                    )
                     edgeToCheck = e
                     removedEdges.append(e)
                     e.seam = False
@@ -424,16 +433,21 @@ class MESH_OT_unwrap(bpy.types.Operator):
 
                 for i, edge in enumerate(bm.edges):
                     edge.seam = ptr_result[i]
-                
+
                 bmesh.update_edit_mesh(obj_data)
 
                 if CURVATURE_Properties.enablePostProcess:
-                    print('\n')
-                    bpy.ops.mesh.select_all(action='SELECT')
+                    print("\n")
+                    bpy.ops.mesh.select_all(action="SELECT")
 
-                    bpy.ops.uv.unwrap(method='CONFORMAL')
+                    bpy.ops.uv.unwrap(method="CONFORMAL")
 
-                    distortedFaces = selectDistortedFaces(context, obj, bm, CURVATURE_Properties.postProcessDistortionThreshold)
+                    distortedFaces = selectDistortedFaces(
+                        context,
+                        obj,
+                        bm,
+                        CURVATURE_Properties.postProcessDistortionThreshold,
+                    )
                     distortedEdges = list()
                     for f in distortedFaces:
                         for e in f.edges:
@@ -449,7 +463,7 @@ class MESH_OT_unwrap(bpy.types.Operator):
                     for i, edge in enumerate(bm.edges):
                         if edge.index in distortedEdgesIndices:
                             edge.seam = bool(small_ptr_result[i])
-                    
+
                     bmesh.update_edit_mesh(obj_data)
 
                     # bpy.ops.mesh.select_all(action='DESELECT')
@@ -458,12 +472,12 @@ class MESH_OT_unwrap(bpy.types.Operator):
             endUnwrapBatch(smallBatch)
 
             if CURVATURE_Properties.unwrapAtEnd:
-                bpy.ops.mesh.select_all(action='SELECT')
+                bpy.ops.mesh.select_all(action="SELECT")
                 if bpy.app.version >= (4, 3, 0):
                     bpy.ops.uv.unwrap(method=CURVATURE_Properties.unwrapType)
                 else:
                     bpy.ops.uv.unwrap()
-                bpy.ops.mesh.select_all(action='DESELECT')
+                bpy.ops.mesh.select_all(action="DESELECT")
 
             VIEW3D_PT_OKUnwrap.operation_time = round(
                 (time.perf_counter() - start) * 1000, 2
@@ -503,7 +517,7 @@ class MESH_OT_load_dll(bpy.types.Operator):
         okunwrap_dll = CDLL(getLibraryPath())
 
         return {"FINISHED"}
-    
+
 
 class MESH_OT_remove_uv_loop(bpy.types.Operator):
     """Removes seam loops that are a part of/adjacent to selection. Selection will convert to edges automatically"""
@@ -529,28 +543,30 @@ class MESH_OT_remove_uv_loop(bpy.types.Operator):
             initialMeshSelectModeState = bpy.context.tool_settings.mesh_select_mode[:]
 
             bm = bmesh.from_edit_mesh(obj_data)
-            bm.select_mode = {'VERT', 'EDGE', 'FACE'}
+            bm.select_mode = {"VERT", "EDGE", "FACE"}
             bm.select_flush_mode()
             context.tool_settings.mesh_select_mode = (False, True, False)
 
             selected_edges = {edge for edge in bm.edges if edge.select}
-            
+
             if selected_edges:
                 for e in selected_edges:
                     remove_loop(e, CURVATURE_Properties.extendAmount)
                     # removedLoops.extend(remove_loop(e, CURVATURE_Properties.extendAmount))
-            
+
             if len(bpy.context.selected_objects) == 1 and len(selected_edges) == 0:
-                self.report({'INFO'}, 'No edges selected')
-                return {'CANCELLED'}
+                self.report({"INFO"}, "No edges selected")
+                return {"CANCELLED"}
 
             # bpy.ops.mesh.select_all(action='DESELECT')
             context.tool_settings.mesh_select_mode = initialMeshSelectModeState
             bmesh.update_edit_mesh(obj_data)
 
-        VIEW3D_PT_OKUnwrap.operation_time = round((time.perf_counter() - start)*1000, 2)
+        VIEW3D_PT_OKUnwrap.operation_time = round(
+            (time.perf_counter() - start) * 1000, 2
+        )
 
-        return {'FINISHED'}
+        return {"FINISHED"}
 
 
 class VIEW3D_PT_OKUnwrap(bpy.types.Panel):  # class naming convention ‘CATEGORY_PT_name’
@@ -602,17 +618,16 @@ class VIEW3D_PT_OKUnwrap(bpy.types.Panel):  # class naming convention ‘CATEGOR
 
         if CURVATURE_Properties.unwrapAtEnd:
             if bpy.app.version >= (4, 3, 0):
-                row = self.layout.row(heading='Unwrap Type:')
+                row = self.layout.row(heading="Unwrap Type:")
                 row.prop(CURVATURE_Properties, "unwrapType", text="")
                 # self.layout.separator()
 
-        
         row = self.layout.row()
         row.prop(CURVATURE_Properties, "enablePostProcess")
         if CURVATURE_Properties.enablePostProcess:
             row = self.layout.row()
             row.prop(CURVATURE_Properties, "postProcessDistortionThreshold")
-        
+
         self.layout.separator()
         row = self.layout.row()
         row.prop(CURVATURE_Properties, "biasCurvatureAmount")
@@ -718,10 +733,11 @@ class CURVATURE_Properties(bpy.types.PropertyGroup):
 
     unwrapType: bpy.props.EnumProperty(
         name="Unwrap Type",
-        default='ANGLE_BASED',
-        items= [('ANGLE_BASED', "Angle Based", ""),
-                ('CONFORMAL', "Conformal", ""),
-                ('MINIMUM_STRETCH', "Minimum Stretch", "")
+        default="ANGLE_BASED",
+        items=[
+            ("ANGLE_BASED", "Angle Based", ""),
+            ("CONFORMAL", "Conformal", ""),
+            ("MINIMUM_STRETCH", "Minimum Stretch", ""),
         ],
         description="Unwrap type - Angle Based, Conformal or Minimum Stretch",
     )  # type: ignore
@@ -730,13 +746,13 @@ class CURVATURE_Properties(bpy.types.PropertyGroup):
         name="Mark Sharp Edges as Seams",
         default=True,
         description="Option will mark all sharp edges as seams before running the algorithm",
-    ) # type: ignore
+    )  # type: ignore
 
     enablePostProcess: bpy.props.BoolProperty(
         name="Enable Post Process",
         default=True,
         description="Option will search for distorted uv islands and attempt to fix them",
-    ) # type: ignore
+    )  # type: ignore
 
     postProcessDistortionThreshold: bpy.props.FloatProperty(
         name="Post Process Threshold",
@@ -746,6 +762,7 @@ class CURVATURE_Properties(bpy.types.PropertyGroup):
         step=0.01,
         description="Threshold after which a UV island is considered distorted, and sent to post-processing",
     )  # type: ignore
+
 
 classes = [
     VIEW3D_PT_OKUnwrap,
