@@ -410,8 +410,9 @@ class MESH_OT_unwrap(bpy.types.Operator):
 
                 obj_data = obj.data
 
-                if not obj.mode == "EDIT":
-                    bpy.ops.object.mode_set(mode="EDIT")
+                # if not obj.mode == "EDIT":
+                bpy.ops.object.mode_set(mode="OBJECT")
+                bpy.ops.object.mode_set(mode="EDIT")
 
                 bm = bmesh.from_edit_mesh(obj_data)
 
