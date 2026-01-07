@@ -520,6 +520,53 @@ class MESH_OT_load_dll(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class MESH_OT_create_uv_loop(bpy.types.Operator):
+    """Removes seam loops that are a part of/adjacent to selection. Selection will convert to edges automatically"""
+
+    bl_idname = "mesh.create_uv_loop"
+    bl_label = "create_uv_loop"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        CURVATURE_Properties = context.scene.CURVATURE_Properties
+        start = time.perf_counter()
+
+        for obj in bpy.context.selected_objects:
+            if obj.type != "MESH":
+                continue
+
+            obj_data = obj.data
+
+            if not obj.mode == "EDIT":
+                bpy.ops.object.mode_set(mode="EDIT")
+            initialMeshSelectModeState = bpy.context.tool_settings.mesh_select_mode[:]
+
+            bm = bmesh.from_edit_mesh(obj_data)
+            bm.select_mode = {"VERT", "EDGE", "FACE"}
+            bm.select_flush_mode()
+            context.tool_settings.mesh_select_mode = (False, True, False)
+
+            selected_edges = {edge for edge in bm.edges if edge.select}
+
+            if selected_edges:
+                for e in selected_edges:
+                    remove_loop(e, CURVATURE_Properties.extendAmount)
+
+            if len(bpy.context.selected_objects) == 1 and len(selected_edges) == 0:
+                self.report({"INFO"}, "No edges selected")
+                return {"CANCELLED"}
+
+            # bpy.ops.mesh.select_all(action='DESELECT')
+            context.tool_settings.mesh_select_mode = initialMeshSelectModeState
+            bmesh.update_edit_mesh(obj_data)
+
+        VIEW3D_PT_OKUnwrap.operation_time = round(
+            (time.perf_counter() - start) * 1000, 2
+        )
+
+        return {"FINISHED"}
+
+
 class MESH_OT_remove_uv_loop(bpy.types.Operator):
     """Removes seam loops that are a part of/adjacent to selection. Selection will convert to edges automatically"""
 
@@ -590,6 +637,7 @@ class VIEW3D_PT_OKUnwrap(bpy.types.Panel):  # class naming convention ‘CATEGOR
         self.layout.separator()
 
         row = self.layout.row()
+        row.operator("mesh.create_uv_loop", text="Create Loops")
         row.operator("mesh.remove_uv_loop", text="Remove Loops")
         # row.operator("mesh.remove_uv_loop", text="", icon='TRASH')
         self.layout.separator()
@@ -770,6 +818,7 @@ classes = [
     MESH_OT_unwrap,
     MESH_OT_unload_dll,
     MESH_OT_load_dll,
+    MESH_OT_create_uv_loop,
     MESH_OT_remove_uv_loop,
     CURVATURE_Properties,
 ]
