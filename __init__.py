@@ -16,7 +16,7 @@ bl_info = {
     "author": "Iurii Kotlov, Vladislav Lopanov",
     "description": "Automatic curvature-based UV unwrapping",
     "blender": (4, 23, 0),
-    "version": (1, 0, 1),
+    "version": (1, 1, 0),
     "location": "",
     "warning": "",
     "category": "Generic",
@@ -34,6 +34,8 @@ import sys
 import addon_utils
 import pathlib
 import platform
+import traceback
+from . import okunwrap_core
 
 okunwrap_dll = None
 
@@ -167,45 +169,56 @@ def endUnwrapBatch(batch):
 def loadLibrary():
     global okunwrap_dll
 
-    addon_path = None
-    for mod in addon_utils.modules():
-        if mod.bl_info.get("name") != "OKUnwrap":
-            continue
-        p = pathlib.Path(mod.__file__)
-        addon_path = p.parent / getLibraryPath()
-    okunwrap_dll = CDLL(str(addon_path))
+    root_folder = pathlib.Path(__file__).parent.resolve()
+    print(root_folder, sys.path)
+    # sys.path.insert(0, root_folder)
+    import os
 
-    try:
-        okunwrap_dll.OKUnwrap_Batch_Begin.argtypes = [UnwrapSettings]
-        okunwrap_dll.OKUnwrap_Batch_Begin.restype = c_void_p
+    # os.add_dll_directory(root_folder)
 
-        okunwrap_dll.OKUnwrap_Batch_End.argtypes = [c_void_p]
-        okunwrap_dll.OKUnwrap_Batch_End.restype = None
+    # print(okunwrap_core.add((1, 1, 1), (2, 2, 2)))
 
-        okunwrap_dll.OKUnwrap_Batch_InitMesh.argtypes = [c_void_p, EdgeData, VertexData]
-        okunwrap_dll.OKUnwrap_Batch_InitMesh.restype = c_bool
+    # import example_module
 
-        okunwrap_dll.OKUnwrap_Batch_Execute.argtypes = [c_void_p]
-        okunwrap_dll.OKUnwrap_Batch_Execute.restype = c_bool
+    # addon_path = None
+    # for mod in addon_utils.modules():
+    #     if mod.bl_info.get("name") != "OKUnwrap":
+    #         continue
+    #     p = pathlib.Path(mod.__file__)
+    #     addon_path = p.parent / getLibraryPath()
+    # okunwrap_dll = CDLL(str(addon_path))
 
-        okunwrap_dll.OKUnwrap_Batch_Result.argtypes = [c_void_p]
-        okunwrap_dll.OKUnwrap_Batch_Result.restype = POINTER(c_int)
-    except Exception as e:
-        print(f"OKUnwrap register(): {e}", file=sys.stderr)
-    finally:
-        pass
+    # try:
+    #     okunwrap_dll.OKUnwrap_Batch_Begin.argtypes = [UnwrapSettings]
+    #     okunwrap_dll.OKUnwrap_Batch_Begin.restype = c_void_p
+
+    #     okunwrap_dll.OKUnwrap_Batch_End.argtypes = [c_void_p]
+    #     okunwrap_dll.OKUnwrap_Batch_End.restype = None
+
+    #     okunwrap_dll.OKUnwrap_Batch_InitMesh.argtypes = [c_void_p, EdgeData, VertexData]
+    #     okunwrap_dll.OKUnwrap_Batch_InitMesh.restype = c_bool
+
+    #     okunwrap_dll.OKUnwrap_Batch_Execute.argtypes = [c_void_p]
+    #     okunwrap_dll.OKUnwrap_Batch_Execute.restype = c_bool
+
+    #     okunwrap_dll.OKUnwrap_Batch_Result.argtypes = [c_void_p]
+    #     okunwrap_dll.OKUnwrap_Batch_Result.restype = POINTER(c_int)
+    # except Exception as e:
+    #     print(f"OKUnwrap register(): {e}", file=sys.stderr)
+    # finally:
+    #     pass
 
 
 def unloadLibrary():
     import _ctypes
 
-    try:
-        if platform.system() == "Windows":
-            _ctypes.FreeLibrary(okunwrap_dll._handle)
-        else:
-            _ctypes.dlclose(okunwrap_dll._handle)
-    except Exception as e:
-        print(f"OKUnwrap unregister(): {e}", file=sys.stderr)
+    # try:
+    #     if platform.system() == "Windows":
+    #         _ctypes.FreeLibrary(okunwrap_dll._handle)
+    #     else:
+    #         _ctypes.dlclose(okunwrap_dll._handle)
+    # except Exception as e:
+    #     print(f"OKUnwrap unregister(): {e}", file=sys.stderr)
 
 
 def selectDistortedFaces(context, obj, bm, threshold):
@@ -400,8 +413,6 @@ class MESH_OT_unwrap(bpy.types.Operator):
     def execute(self, context):
         CURVATURE_Properties = context.scene.CURVATURE_Properties
         start = time.perf_counter()
-        batch = None
-        smallBatch = None
 
         try:
             for obj in bpy.context.selected_objects:
@@ -418,6 +429,17 @@ class MESH_OT_unwrap(bpy.types.Operator):
 
                 bm.edges.ensure_lookup_table()
 
+                if len(obj_data.vertices) != len(bm.verts) or len(
+                    obj_data.edges
+                ) != len(bm.edges):
+                    print(
+                        f"Verts and edges count mismatch between object data and BMesh! {len(obj_data.vertices)=}/{len(bm.verts)=}, {len(obj_data.edges)=}/{len(bm.edges)=}",
+                        file=sys.stderr,
+                    )
+                    continue
+
+                # continue
+
                 if CURVATURE_Properties.overwriteSeams:
                     for edge in bm.edges:
                         edge.seam = False
@@ -427,15 +449,63 @@ class MESH_OT_unwrap(bpy.types.Operator):
                         if not edge.smooth:
                             edge.seam = True
 
-                batch = beginUnwrapBatch(bm, obj_data, context)
-                okunwrap_dll.OKUnwrap_Batch_Execute(batch)
+                arr_verts = np.ctypeslib.as_array(
+                    cast(obj_data.vertices[0].as_pointer(), POINTER(c_float)),
+                    (len(obj_data.vertices) * 3,),
+                ).view(dtype=np.dtype([("x", "f4"), ("y", "f4"), ("z", "f4")]))
+                arr_edges = np.ctypeslib.as_array(
+                    cast(obj_data.edges[0].as_pointer(), POINTER(c_int)),
+                    (len(obj_data.edges) * 2,),
+                ).view(dtype=np.dtype([("u", "i"), ("v", "i")]))
 
-                ptr_result = okunwrap_dll.OKUnwrap_Batch_Result(batch)
+                curvatures = np.zeros(len(obj_data.edges), dtype=np.double)
+
+                for idx, edge in enumerate(bm.edges):
+                    if edge.is_contiguous:
+                        curvatures[edge.index] = edge.calc_face_angle()
+                    # else:
+                    #     if edge.is_boundary:
+                    #         edge.seam = True
+
+                seams = np.empty(len(obj_data.edges), dtype=bool)
+                selected_edge = None
+
+                obj_data.edges.foreach_get("use_seam", seams)
+
+                for edge in bm.edges:
+                    if edge.select:
+                        selected_edge = edge.index
+
+                cpp_mesh = okunwrap_core.Mesh(
+                    arr_verts,
+                    arr_edges,
+                    seams,
+                    curvatures,
+                )
+                op = okunwrap_core.ExtendToLoopOperation(
+                    cpp_mesh,
+                    selected_edge,
+                    okunwrap_core.UnwrapSettings(
+                        CURVATURE_Properties.biasCurvatureAmount,
+                        CURVATURE_Properties.biasInlineLoopnessAmount,
+                        CURVATURE_Properties.biasSeamClosenessAmount,
+                        CURVATURE_Properties.curvatureThreshold,
+                        CURVATURE_Properties.seamMarginAmount,
+                        CURVATURE_Properties.seamSearchRadius,
+                        CURVATURE_Properties.extendAmount,
+                        CURVATURE_Properties.unwrapSteps,
+                    ),
+                )
+                op.execute()
+                cpp_mesh.notify_need_update()
+
+                # batch = beginUnwrapBatch(bm, obj_data, context)
+                # okunwrap_dll.OKUnwrap_Batch_Execute(batch)
+
+                # ptr_result = okunwrap_dll.OKUnwrap_Batch_Result(batch)
 
                 for i, edge in enumerate(bm.edges):
-                    edge.seam = ptr_result[i]
-
-                bmesh.update_edit_mesh(obj_data)
+                    edge.seam = seams[i]
 
                 if CURVATURE_Properties.enablePostProcess:
                     print("\n")
@@ -484,11 +554,10 @@ class MESH_OT_unwrap(bpy.types.Operator):
                 (time.perf_counter() - start) * 1000, 2
             )
         except Exception as e:
-            print(f"MESH_OT_unwrap: {e}", file=sys.stderr)
+            print(f"MESH_OT_unwrap: {traceback.format_exc()}", file=sys.stderr)
         finally:
-            pass
+            bmesh.update_edit_mesh(obj_data)
             # endUnwrapBatch(batch)
-            # endUnwrapBatch(smallBatch)
         print("====================================================")
 
         return {"FINISHED"}
@@ -535,10 +604,10 @@ class MESH_OT_create_uv_loop(bpy.types.Operator):
             if obj.type != "MESH":
                 continue
 
-            obj_data = obj.data
+            bpy.ops.object.mode_set(mode="OBJECT")
+            bpy.ops.object.mode_set(mode="EDIT")
 
-            if not obj.mode == "EDIT":
-                bpy.ops.object.mode_set(mode="EDIT")
+            obj_data = obj.data
             initialMeshSelectModeState = bpy.context.tool_settings.mesh_select_mode[:]
 
             bm = bmesh.from_edit_mesh(obj_data)
@@ -547,10 +616,61 @@ class MESH_OT_create_uv_loop(bpy.types.Operator):
             context.tool_settings.mesh_select_mode = (False, True, False)
 
             selected_edges = {edge for edge in bm.edges if edge.select}
+            arr_verts = np.ctypeslib.as_array(
+                cast(obj_data.vertices[0].as_pointer(), POINTER(c_float)),
+                (len(obj_data.vertices) * 3,),
+            ).view(dtype=np.dtype([("x", "f4"), ("y", "f4"), ("z", "f4")]))
+            arr_edges = np.ctypeslib.as_array(
+                cast(obj_data.edges[0].as_pointer(), POINTER(c_int)),
+                (len(obj_data.edges) * 2,),
+            ).view(dtype=np.dtype([("u", "i"), ("v", "i")]))
 
-            if selected_edges:
-                for e in selected_edges:
-                    remove_loop(e, CURVATURE_Properties.extendAmount)
+            curvatures = np.zeros(len(obj_data.edges), dtype=np.double)
+
+            for idx, edge in enumerate(bm.edges):
+                if edge.is_contiguous:
+                    curvatures[edge.index] = edge.calc_face_angle()
+
+            seams = np.empty(len(obj_data.edges), dtype=bool)
+
+            obj_data.edges.foreach_get("use_seam", seams)
+
+            for edge in bm.edges:
+                if edge.select:
+                    selected_edge = edge.index
+
+            cpp_mesh = okunwrap_core.Mesh(
+                arr_verts,
+                arr_edges,
+                seams,
+                curvatures,
+            )
+            for e in selected_edges:
+                # remove_loop(e, CURVATURE_Properties.extendAmount)
+                op = okunwrap_core.ExtendToLoopOperation(
+                    cpp_mesh,
+                    e.index,
+                    okunwrap_core.UnwrapSettings(
+                        CURVATURE_Properties.biasCurvatureAmount,
+                        CURVATURE_Properties.biasInlineLoopnessAmount,
+                        CURVATURE_Properties.biasSeamClosenessAmount,
+                        CURVATURE_Properties.curvatureThreshold,
+                        CURVATURE_Properties.seamMarginAmount,
+                        CURVATURE_Properties.seamSearchRadius,
+                        CURVATURE_Properties.extendAmount,
+                        CURVATURE_Properties.unwrapSteps,
+                    ),
+                )
+                op.execute()
+            cpp_mesh.notify_need_update()
+
+            # batch = beginUnwrapBatch(bm, obj_data, context)
+            # okunwrap_dll.OKUnwrap_Batch_Execute(batch)
+
+            # ptr_result = okunwrap_dll.OKUnwrap_Batch_Result(batch)
+
+            for i, edge in enumerate(bm.edges):
+                edge.seam = seams[i]
 
             if len(bpy.context.selected_objects) == 1 and len(selected_edges) == 0:
                 self.report({"INFO"}, "No edges selected")

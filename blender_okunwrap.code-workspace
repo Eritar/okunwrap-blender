@@ -4,5 +4,11 @@
 			"path": "."
 		}
 	],
-	"settings": {}
+	"settings": {
+		"blender.addon.reloadOnSave": true,
+		"blender.addon.moduleName": "okunwrap_blender",
+		"python.analysis.extraPaths": [
+			"${workspaceFolder}"
+		]
+	}
 }
