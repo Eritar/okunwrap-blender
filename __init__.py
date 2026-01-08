@@ -223,7 +223,7 @@ def unloadLibrary():
 
 def selectDistortedFaces(context, obj, bm, threshold):
     """
-    Selects faces with UV angular distortion above a normalized threshold.
+    Select faces with UV angular distortion above a normalized threshold.
     """
     # threshold = 0.2
 
@@ -273,7 +273,7 @@ def selectDistortedFaces(context, obj, bm, threshold):
 
 def selectDistortedEdges(context, obj, bm, threshold):
     """
-    Selects edges with UV length distortion above a normalized threshold.
+    Select edges with UV length distortion above a normalized threshold.
     """
     # threshold = 0.8
 
@@ -332,7 +332,7 @@ def selectDistortedEdges(context, obj, bm, threshold):
 
 
 def get_uv_angle(uv1, uv2, uv3):
-    """Calculates the angle between three 2D UV coordinates."""
+    """Calculate the angle between three 2D UV coordinates."""
     vec1 = uv2 - uv1
     vec2 = uv3 - uv1
 
@@ -404,7 +404,7 @@ def remove_loop(start_edge: bmesh.types.BMEdge, extendAmount):
 
 
 class MESH_OT_unwrap(bpy.types.Operator):
-    """Unwraps selected/edited meshes using the settings below"""
+    """Unwrap selected/edited meshes using the settings below"""
 
     bl_idname = "mesh.unwrap"
     bl_label = "unwrap"
@@ -564,7 +564,7 @@ class MESH_OT_unwrap(bpy.types.Operator):
 
 
 class MESH_OT_unload_dll(bpy.types.Operator):
-    """Create a new monkey mesh object with a subdivision surf modifier and shaded smooth"""
+    """Unload OKUnwrap DLL"""
 
     bl_idname = "mesh.unload_dll"
     bl_label = "PLACEHOLDER"
@@ -576,7 +576,7 @@ class MESH_OT_unload_dll(bpy.types.Operator):
 
 
 class MESH_OT_load_dll(bpy.types.Operator):
-    """Create a new monkey mesh object with a subdivision surf modifier and shaded smooth"""
+    """Load OKUnwrap DLL"""
 
     bl_idname = "mesh.load_dll"
     bl_label = "PLACEHOLDER"
@@ -590,7 +590,7 @@ class MESH_OT_load_dll(bpy.types.Operator):
 
 
 class MESH_OT_create_uv_loop(bpy.types.Operator):
-    """Removes seam loops that are a part of/adjacent to selection. Selection will convert to edges automatically"""
+    """Create seam loops from selected edges, using settings from the main unwrap function"""
 
     bl_idname = "mesh.create_uv_loop"
     bl_label = "create_uv_loop"
@@ -608,12 +608,12 @@ class MESH_OT_create_uv_loop(bpy.types.Operator):
             bpy.ops.object.mode_set(mode="EDIT")
 
             obj_data = obj.data
-            initialMeshSelectModeState = bpy.context.tool_settings.mesh_select_mode[:]
+            # initialMeshSelectModeState = bpy.context.tool_settings.mesh_select_mode[:]
 
             bm = bmesh.from_edit_mesh(obj_data)
-            bm.select_mode = {"VERT", "EDGE", "FACE"}
-            bm.select_flush_mode()
-            context.tool_settings.mesh_select_mode = (False, True, False)
+            # bm.select_mode = {"VERT", "EDGE", "FACE"}
+            # bm.select_flush_mode()
+            # context.tool_settings.mesh_select_mode = (False, True, False)
 
             selected_edges = {edge for edge in bm.edges if edge.select}
             arr_verts = np.ctypeslib.as_array(
@@ -677,7 +677,7 @@ class MESH_OT_create_uv_loop(bpy.types.Operator):
                 return {"CANCELLED"}
 
             # bpy.ops.mesh.select_all(action='DESELECT')
-            context.tool_settings.mesh_select_mode = initialMeshSelectModeState
+            # context.tool_settings.mesh_select_mode = initialMeshSelectModeState
             bmesh.update_edit_mesh(obj_data)
 
         VIEW3D_PT_OKUnwrap.operation_time = round(
@@ -688,7 +688,7 @@ class MESH_OT_create_uv_loop(bpy.types.Operator):
 
 
 class MESH_OT_remove_uv_loop(bpy.types.Operator):
-    """Removes seam loops that are a part of/adjacent to selection. Selection will convert to edges automatically"""
+    """Remove seam loops that are a part of/adjacent to selection. Selection will convert to edges automatically"""
 
     bl_idname = "mesh.remove_uv_loop"
     bl_label = "remove_uv_loop"
