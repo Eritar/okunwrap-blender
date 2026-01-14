@@ -419,12 +419,11 @@ class MESH_OT_unwrap(bpy.types.Operator):
                 if obj.type != "MESH":
                     continue
 
-                obj_data = obj.data
-
                 # if not obj.mode == "EDIT":
                 bpy.ops.object.mode_set(mode="OBJECT")
                 bpy.ops.object.mode_set(mode="EDIT")
 
+                obj_data = obj.data
                 bm = bmesh.from_edit_mesh(obj_data)
 
                 bm.edges.ensure_lookup_table()
@@ -438,16 +437,28 @@ class MESH_OT_unwrap(bpy.types.Operator):
                     )
                     continue
 
-                # continue
+                curvatures = np.zeros(len(obj_data.edges), dtype=np.double)
 
-                if CURVATURE_Properties.overwriteSeams:
-                    for edge in bm.edges:
+                for idx, edge in enumerate(bm.edges):
+                    if CURVATURE_Properties.overwriteSeams:
                         edge.seam = False
 
-                if CURVATURE_Properties.useSharpAsSeams:
-                    for edge in bm.edges:
+                    if CURVATURE_Properties.useSharpAsSeams:
                         if not edge.smooth:
                             edge.seam = True
+
+                    if edge.is_contiguous:
+                        curvatures[edge.index] = edge.calc_face_angle()
+                    else:
+                        if edge.is_boundary:
+                            edge.seam = True
+
+                bpy.ops.object.mode_set(mode="OBJECT")
+                bpy.ops.object.mode_set(mode="EDIT")
+
+                obj_data = obj.data
+                bm = bmesh.from_edit_mesh(obj_data)
+                bm.edges.ensure_lookup_table()
 
                 arr_verts = np.ctypeslib.as_array(
                     cast(obj_data.vertices[0].as_pointer(), POINTER(c_float)),
@@ -458,23 +469,9 @@ class MESH_OT_unwrap(bpy.types.Operator):
                     (len(obj_data.edges) * 2,),
                 ).view(dtype=np.dtype([("u", "i"), ("v", "i")]))
 
-                curvatures = np.zeros(len(obj_data.edges), dtype=np.double)
-
-                for idx, edge in enumerate(bm.edges):
-                    if edge.is_contiguous:
-                        curvatures[edge.index] = edge.calc_face_angle()
-                    # else:
-                    #     if edge.is_boundary:
-                    #         edge.seam = True
-
                 seams = np.empty(len(obj_data.edges), dtype=bool)
-                selected_edge = None
 
                 obj_data.edges.foreach_get("use_seam", seams)
-
-                for edge in bm.edges:
-                    if edge.select:
-                        selected_edge = edge.index
 
                 cpp_mesh = okunwrap_core.Mesh(
                     arr_verts,
@@ -482,9 +479,8 @@ class MESH_OT_unwrap(bpy.types.Operator):
                     seams,
                     curvatures,
                 )
-                op = okunwrap_core.ExtendToLoopOperation(
+                op = okunwrap_core.UnwrapOperation(
                     cpp_mesh,
-                    selected_edge,
                     okunwrap_core.UnwrapSettings(
                         CURVATURE_Properties.biasCurvatureAmount,
                         CURVATURE_Properties.biasInlineLoopnessAmount,
@@ -499,48 +495,9 @@ class MESH_OT_unwrap(bpy.types.Operator):
                 op.execute()
                 cpp_mesh.notify_need_update()
 
-                # batch = beginUnwrapBatch(bm, obj_data, context)
-                # okunwrap_dll.OKUnwrap_Batch_Execute(batch)
-
-                # ptr_result = okunwrap_dll.OKUnwrap_Batch_Result(batch)
-
-                for i, edge in enumerate(bm.edges):
-                    edge.seam = seams[i]
-
-                if CURVATURE_Properties.enablePostProcess:
-                    print("\n")
-                    bpy.ops.mesh.select_all(action="SELECT")
-
-                    bpy.ops.uv.unwrap(method="CONFORMAL")
-
-                    distortedFaces = selectDistortedFaces(
-                        context,
-                        obj,
-                        bm,
-                        CURVATURE_Properties.postProcessDistortionThreshold,
-                    )
-                    distortedEdges = list()
-                    for f in distortedFaces:
-                        for e in f.edges:
-                            distortedEdges.append(e)
-                    distortedEdges = set(distortedEdges)
-                    distortedEdgesIndices = {e.index for e in distortedEdges}
-
-                    smallBatch = beginUnwrapBatch(bm, obj_data, context, True)
-                    okunwrap_dll.OKUnwrap_Batch_Execute(smallBatch)
-
-                    small_ptr_result = okunwrap_dll.OKUnwrap_Batch_Result(smallBatch)
-
-                    for i, edge in enumerate(bm.edges):
-                        if edge.index in distortedEdgesIndices:
-                            edge.seam = bool(small_ptr_result[i])
-
-                    bmesh.update_edit_mesh(obj_data)
-
-                    # bpy.ops.mesh.select_all(action='DESELECT')
-
-            endUnwrapBatch(batch)
-            endUnwrapBatch(smallBatch)
+                bpy.ops.object.mode_set(mode="OBJECT")
+                obj_data.edges.foreach_set("use_seam", seams)
+                bpy.ops.object.mode_set(mode="EDIT")
 
             if CURVATURE_Properties.unwrapAtEnd:
                 bpy.ops.mesh.select_all(action="SELECT")
@@ -556,8 +513,8 @@ class MESH_OT_unwrap(bpy.types.Operator):
         except Exception as e:
             print(f"MESH_OT_unwrap: {traceback.format_exc()}", file=sys.stderr)
         finally:
-            bmesh.update_edit_mesh(obj_data)
-            # endUnwrapBatch(batch)
+            # bmesh.update_edit_mesh(obj_data)
+            pass
         print("====================================================")
 
         return {"FINISHED"}
