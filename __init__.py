@@ -676,6 +676,14 @@ class MESH_OT_create_uv_loop(bpy.types.Operator):
                 self.report({"INFO"}, "No edges selected")
                 return {"CANCELLED"}
 
+            if CURVATURE_Properties.enableUnwrapAfterLoop:
+                bpy.ops.mesh.select_all(action="SELECT")
+                if bpy.app.version >= (4, 3, 0):
+                    bpy.ops.uv.unwrap(method=CURVATURE_Properties.unwrapType)
+                else:
+                    bpy.ops.uv.unwrap()
+                bpy.ops.mesh.select_all(action="DESELECT")
+
             # bpy.ops.mesh.select_all(action='DESELECT')
             # context.tool_settings.mesh_select_mode = initialMeshSelectModeState
             bmesh.update_edit_mesh(obj_data)
@@ -728,6 +736,15 @@ class MESH_OT_remove_uv_loop(bpy.types.Operator):
 
             # bpy.ops.mesh.select_all(action='DESELECT')
             context.tool_settings.mesh_select_mode = initialMeshSelectModeState
+
+            if CURVATURE_Properties.enableUnwrapAfterLoop:
+                bpy.ops.mesh.select_all(action="SELECT")
+                if bpy.app.version >= (4, 3, 0):
+                    bpy.ops.uv.unwrap(method=CURVATURE_Properties.unwrapType)
+                else:
+                    bpy.ops.uv.unwrap()
+                bpy.ops.mesh.select_all(action="DESELECT")
+
             bmesh.update_edit_mesh(obj_data)
 
         VIEW3D_PT_OKUnwrap.operation_time = round(
@@ -759,8 +776,10 @@ class VIEW3D_PT_OKUnwrap(bpy.types.Panel):  # class naming convention ‘CATEGOR
         row = self.layout.row()
         row.operator("mesh.create_uv_loop", text="Create Loops")
         row.operator("mesh.remove_uv_loop", text="Remove Loops")
+        row = self.layout.row()
+        row.prop(CURVATURE_Properties, "enableUnwrapAfterLoop")
         # row.operator("mesh.remove_uv_loop", text="", icon='TRASH')
-        self.layout.separator()
+        # self.layout.separator()
 
         row = self.layout.row()
         row.operator("mesh.load_dll", text="LOAD DLL")
@@ -791,11 +810,11 @@ class VIEW3D_PT_OKUnwrap(bpy.types.Panel):  # class naming convention ‘CATEGOR
                 row.prop(CURVATURE_Properties, "unwrapType", text="")
                 # self.layout.separator()
 
-        row = self.layout.row()
-        row.prop(CURVATURE_Properties, "enablePostProcess")
-        if CURVATURE_Properties.enablePostProcess:
-            row = self.layout.row()
-            row.prop(CURVATURE_Properties, "postProcessDistortionThreshold")
+        # row = self.layout.row()
+        # row.prop(CURVATURE_Properties, "enablePostProcess")
+        # if CURVATURE_Properties.enablePostProcess:
+        #     row = self.layout.row()
+        #     row.prop(CURVATURE_Properties, "postProcessDistortionThreshold")
 
         self.layout.separator()
         row = self.layout.row()
@@ -853,7 +872,7 @@ class CURVATURE_Properties(bpy.types.PropertyGroup):
     )  # type: ignore
 
     overwriteSeams: bpy.props.BoolProperty(
-        name="Overwrite Seams",
+        name="Overwrite Existing Seams",
         default=True,
         description="Option to overwrite existing seams. If unchecked - OKUnwrap will add seams to already existing ones",
     )  # type: ignore
@@ -908,7 +927,7 @@ class CURVATURE_Properties(bpy.types.PropertyGroup):
             ("CONFORMAL", "Conformal", ""),
             ("MINIMUM_STRETCH", "Minimum Stretch", ""),
         ],
-        description="Unwrap type - Angle Based, Conformal or Minimum Stretch",
+        description="Blender's built in unwrap after generating seams - Angle Based, Conformal or Minimum Stretch",
     )  # type: ignore
 
     useSharpAsSeams: bpy.props.BoolProperty(
@@ -930,6 +949,12 @@ class CURVATURE_Properties(bpy.types.PropertyGroup):
         soft_max=1,
         step=0.01,
         description="Threshold after which a UV island is considered distorted, and sent to post-processing",
+    )  # type: ignore
+
+    enableUnwrapAfterLoop: bpy.props.BoolProperty(
+        name="Unwrap After Manual Loops",
+        default=True,
+        description="Blender unwrap the mesh after every manual Create Loop/Remove Loop",
     )  # type: ignore
 
 
