@@ -383,6 +383,7 @@ class VIEW3D_PT_OKUnwrap(bpy.types.Panel):  # class naming convention ‘CATEGOR
         row.operator("mesh.remove_uv_loop", text="Remove Loops")
         row = self.layout.row()
         row.prop(CURVATURE_Properties, "enableUnwrapAfterLoop")
+        self.layout.separator()
 
         row = self.layout.row()
         row.prop(CURVATURE_Properties, "unwrapSteps")
